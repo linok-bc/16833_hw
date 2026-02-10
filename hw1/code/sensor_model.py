@@ -31,8 +31,8 @@ class SensorModel:
         self._lambda_short = 0.1
 
         # Used in p_max and p_rand, optionally in ray casting
-        # I am going to assume an isotropic grid and use grid squares as the unit here
-        self._max_range = 100
+        # For this project, we seem to be using cm; so this will be 100 grid units assuming that it's isotropic w/ 10cm res.
+        self._max_range = 1000
 
         # Used for thresholding obstacles of the occupancy map
         self._min_probability = 0.35
@@ -47,12 +47,15 @@ class SensorModel:
         """
         param[in] x_t1 : particle state belief [x, y, theta] at time t [world_frame]; has shape [self._batch_size, 3]
         param[in] map_reader : representation of the environment using the MapReader class
-        param[out] out : estimated distance (in # of cells) before the robot hits an obstacle; shape [self._batch_size, 180//self._subsampling]
+        param[out] out : estimated distance (in # of cm) before the robot hits an obstacle; shape [self._batch_size, 180//self._subsampling]
         """
+
+        # for ease, I'm going to convert the max range to map units here
+        max_range_mapframe = np.ceil(self._max_range / map_reader._resolution)
 
         # for each particle, convert to (subsampled) rays in the hemisphere of the robot's direction
         x_t1_cone = np.repeat(np.expand_dims(x_t1, 1), 180 // self._subsampling, 1)
-        x_t1_cone[:, :, 2] -= np.array(range(-90, 90, self._subsampling))       # [batch_size, num_samples, 3]
+        x_t1_cone[:, :, 2] -= np.array(range(-90, 90, self._subsampling)) / (np.pi / 180)        # [batch_size, num_samples, 3]
 
         # currently we have [x, y, theta]; let's convert that to [x, y, dx, dy] through sin/cos
         x_t1_cone = np.dstack([x_t1_cone, x_t1_cone[:, :, 2]])
@@ -60,10 +63,10 @@ class SensorModel:
         x_t1_cone[:, :, 3] = np.sin(x_t1_cone[:, :, 3] * (np.pi/180))           # [batch_size, num_samples, 4]
         
         # unfortunately we need to sample along each direction a lot; RAM goes whee
-        x_t1_cone = np.repeat(np.expand_dims(x_t1_cone, 2), self._max_range)    # [batch_size, num_samples, max_range, 4]
+        x_t1_cone = np.repeat(np.expand_dims(x_t1_cone, 2), self._max_range)    # [batch_size, num_samples, max_rang_mapframe, 4]
         x_t1_cone[:, :, :, 2:] *= np.array(range(1, self.max_range))
 
-        
+        # 
 
 
         out = None
