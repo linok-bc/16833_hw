@@ -27,7 +27,7 @@ class MapReader:
         self._size_y = self._occupancy_map.shape[1] * self._resolution
 
         print('Finished reading 2D map of size: ({}, {})'.format(
-            self._size_x, se._size_y))
+            self._size_x, self._size_y))
 
     def visualize_map(self):
         fig = plt.figure()

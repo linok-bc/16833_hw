@@ -50,27 +50,55 @@ class SensorModel:
         param[out] out : estimated distance (in # of cm) before the robot hits an obstacle; shape [self._batch_size, 180//self._subsampling]
         """
 
-        # for ease, I'm going to convert the max range to map units here
-        max_range_mapframe = np.ceil(self._max_range / map_reader._resolution)
+        """
+        explanation of variables
+
+        batch_size: number of particles being processed at a single time
+        num_samples: number of ray directions being considered, calculated as 180 // self._subsampling
+        max_range_units: the max range of the sensors expressed in map units rather than cm
+        """
+
+        # by default, coordinates are stored in absolute terms (i.e. cm) rather than map units
+        max_range_units = np.ceil(self._max_range / map_reader._resolution).astype(np.uintp)
 
         # for each particle, convert to (subsampled) rays in the hemisphere of the robot's direction
         x_t1_cone = np.repeat(np.expand_dims(x_t1, 1), 180 // self._subsampling, 1)
-        x_t1_cone[:, :, 2] -= np.array(range(-90, 90, self._subsampling)) / (np.pi / 180)        # [batch_size, num_samples, 3]
+        x_t1_cone[:, :, 2] -= np.array(range(-90, 90, self._subsampling)) * (np.pi / 180)   # [batch_size, num_samples, 3]
 
         # currently we have [x, y, theta]; let's convert that to [x, y, dx, dy] through sin/cos
         x_t1_cone = np.dstack([x_t1_cone, x_t1_cone[:, :, 2]])
-        x_t1_cone[:, :, 2] = np.cos(x_t1_cone[:, :, 2] * (np.pi/180))
-        x_t1_cone[:, :, 3] = np.sin(x_t1_cone[:, :, 3] * (np.pi/180))           # [batch_size, num_samples, 4]
+        x_t1_cone[:, :, 2] = np.cos(x_t1_cone[:, :, 2])
+        x_t1_cone[:, :, 3] = np.sin(x_t1_cone[:, :, 3])                                     # [batch_size, num_ray_samples, 4]
         
         # unfortunately we need to sample along each direction a lot; RAM goes whee
-        x_t1_cone = np.repeat(np.expand_dims(x_t1_cone, 2), self._max_range)    # [batch_size, num_samples, max_rang_mapframe, 4]
-        x_t1_cone[:, :, :, 2:] *= np.array(range(1, self.max_range))
+        x_t1_cone = np.repeat(np.expand_dims(x_t1_cone, 2), max_range_units, axis=2)        # [batch_size, num_samples, max_range_units, 4]
+        x_t1_cone[:, :, :, 2:] *= (np.array(range(max_range_units)) * map_reader._resolution) 
 
-        # 
+        # convert from position + offset to new position (e.g (x, dx) -> (x+dx))
+        x_t1_cone = x_t1_cone[..., :2] + x_t1_cone[..., 2:]                                 # [batch_size, num_samples, max_range_units, 2]
 
+        # convert resolution of these units from cm to map units, and snap to grid
+        x_t1_cone /= map_reader._resolution
+        x_t1_cone = np.round(x_t1_cone)
 
-        out = None
-        return out
+        # handles cases for when we leave the grid; clipping is equivalent to repeating the behavior at the edge of the grid
+        x_t1_cone[..., 0] = np.clip(x_t1_cone[..., 0], 0, map_reader._occupancy_map.shape[0]-1)
+        x_t1_cone[..., 1] = np.clip(x_t1_cone[..., 1], 0, map_reader._occupancy_map.shape[1]-1)
+        x_t1_cone = x_t1_cone.astype(np.uintp)
+
+        # convert from indices of grid to occupancy score 
+        x_t1_cone = map_reader.get_map()[x_t1_cone[..., 0], x_t1_cone[..., 1]]              # [batch_size, num_samples, max_range_units]
+
+        # threshold occupancy score to get a binary mask, then convert to distance to the nearest obstacle (or max)
+        x_t1_cone = x_t1_cone >= self._min_probability
+        x_t1_cone = np.where(                                                               # [batch_size, num_samples]
+            x_t1_cone, 
+            np.array(range(max_range_units))[np.newaxis, np.newaxis, :], 
+            max_range_units
+        ).min(axis=-1) 
+        x_t1_cone *= map_reader._resolution         
+
+        return x_t1_cone
 
 
     def beam_range_finder_model(self, z_t1_arr, x_t1):
