@@ -113,7 +113,7 @@ class SensorModel:
         """
 
         # only consider a portion of z_t1_arr to save on computation
-        z_t1_arr_sample = z_t1_arr[::self._subsampling]
+        z_t1_sample = z_t1_arr[::self._subsampling]
 
         # From chapter 6.3, we will consider four different types of noise and four corresponding distributions
         
