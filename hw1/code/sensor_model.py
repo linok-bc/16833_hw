@@ -154,7 +154,8 @@ class SensorModel:
             # 3. calc pmax
             pmax = 1 if (z_k == z_max) else 0
             # 4. calc prand
-            prand = 1/z_max if (0 <= z_k < z_max) else 0
+            # prand = 1/z_max if (0 <= z_k < z_max) else 0
+            pmax = 1.0 if z_k >= z_max - 1e-3 else 0.0  # use small tolerance instead of exact equality
             
             # note coef self._z_max_ is different from max sensor range z_max
             mixture = self._z_hit * phit + self._z_short * pshort + self._z_max * pmax + self._z_rand * prand
@@ -166,7 +167,7 @@ class SensorModel:
         # return log likelihod
         # actually assignment says in practice product works better?
         return np.prod(likelihoods)
-        return np.sum(np.log(likelihoods))
+        # return np.sum(np.log(likelihoods))
             
             
             
