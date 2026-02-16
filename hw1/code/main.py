@@ -104,6 +104,8 @@ if __name__ == '__main__':
     X_bar = init_particles_random(num_particles, occupancy_map)
     # X_bar = init_particles_freespace(num_particles, occupancy_map)
 
+    batch_size = args.batch_size
+
     """
     Monte Carlo Localization Algorithm : Main Loop
     """
@@ -165,7 +167,7 @@ if __name__ == '__main__':
                 w_t = sensor_model.beam_range_finder_model(z_t, x_t1)
                 X_bar_new[start:end, :] = np.hstack((x_t1, w_t))
             else:
-                X_bar_new[start:end, :] = np.hstack((x_t1, X_bar[m, 3]))
+                X_bar_new[start:end, :] = np.hstack((x_t1, X_bar[start:end, 3, np.newaxis]))
 
         X_bar = X_bar_new
         u_t0 = u_t1
