@@ -17,7 +17,7 @@ class SensorModel:
     References: Thrun, Sebastian, Wolfram Burgard, and Dieter Fox. Probabilistic robotics. MIT press, 2005.
     [Chapter 6.3]
     """
-    def __init__(self, map_reader):
+    def __init__(self, map_reader, subsampling=10, batch_size=10):
         """
         TODO : Tune Sensor Model parameters here
         The original numbers are for reference but HAVE TO be tuned.
@@ -45,10 +45,10 @@ class SensorModel:
         self._min_probability = 0.35
 
         # Used in sampling angles in ray casting
-        self._subsampling = 10
+        self._subsampling = subsampling
 
         # Used for processing the data in batches; adjust based on memory contraints (especially with these RAM prices)
-        self._batch_size = 10
+        self._batch_size = batch_size
        
     def ray_casting(self, x_t1):
         """

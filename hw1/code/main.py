@@ -97,7 +97,7 @@ if __name__ == '__main__':
 
     motion_model = MotionModel()
     # sensor_model = SensorModel(occupancy_map)
-    sensor_model = SensorModel(map_obj)  #changed
+    sensor_model = SensorModel(map_obj, batch_size=args.batch_size)  #changed
     resampler = Resampling()
 
     num_particles = args.num_particles
@@ -164,6 +164,8 @@ if __name__ == '__main__':
             """
             if (meas_type == "L"):
                 z_t = ranges
+                if time_idx == 5:
+                    breakpoint()
                 w_t = sensor_model.beam_range_finder_model(z_t, x_t1)
                 X_bar_new[start:end, :] = np.hstack((x_t1, w_t))
             else:
