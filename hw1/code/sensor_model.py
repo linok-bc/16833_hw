@@ -23,13 +23,19 @@ class SensorModel:
         The original numbers are for reference but HAVE TO be tuned.
         """
         self.map_reader = map_reader
-        self._z_hit = 1
-        self._z_short = 0.1
-        self._z_max = 0.1
-        self._z_rand = 100
+        # self._z_hit = 1
+        # self._z_short = 0.1
+        # self._z_max = 0.1
+        # self._z_rand = 100
+        self._z_hit   = 0.80
+        self._z_short = 0.10
+        self._z_max   = 0.05
+        self._z_rand  = 0.05
 
-        self._sigma_hit = 50
-        self._lambda_short = 0.1
+        # self._sigma_hit = 50
+        # self._lambda_short = 0.1
+        self._sigma_hit = 60.0      # cm (start 50–100)
+        self._lambda_short = 0.01   # 1/cm  (mean 100 cm)
 
         # Used in p_max and p_rand, optionally in ray casting
         # For this project, we seem to be using cm; so this will be 100 grid units assuming that it's isotropic w/ 10cm res.
