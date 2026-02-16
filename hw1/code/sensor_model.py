@@ -206,6 +206,7 @@ class SensorModel:
         # --- vectorized mixture components over [B,K] ---
         # broadcast z to [B,K]
         z_bk = z[None, :]                                       # [1, K] -> broadcast to [B, K]
+        z_bk = np.repeat(z_bk, z_star.shape[0] ,axis=0)
 
         # p_hit: Gaussian pdf N(z; z*, sigma) on [0, z_max]
         phit = norm.pdf(z_bk, loc=z_star, scale=self._sigma_hit)  # [B, K]
