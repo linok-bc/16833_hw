@@ -17,6 +17,8 @@ from matplotlib import pyplot as plt
 from matplotlib import figure as fig
 import time
 
+import warnings
+
 
 def visualize_map(occupancy_map):
     fig = plt.figure()
@@ -80,6 +82,7 @@ if __name__ == '__main__':
     parser.add_argument('--path_to_map', default='../data/map/wean.dat')
     parser.add_argument('--path_to_log', default='../data/log/robotdata1.log')
     parser.add_argument('--output', default='results')
+    parser.add_argument('--batch_size', default=10, type=int)
     parser.add_argument('--num_particles', default=500, type=int)
     parser.add_argument('--visualize', action='store_true')
     args = parser.parse_args()
@@ -99,6 +102,7 @@ if __name__ == '__main__':
     num_particles = args.num_particles
     X_bar = init_particles_random(num_particles, occupancy_map)
     # X_bar = init_particles_freespace(num_particles, occupancy_map)
+
     """
     Monte Carlo Localization Algorithm : Main Loop
     """
@@ -142,11 +146,14 @@ if __name__ == '__main__':
 
         # Note: this formulation is intuitive but not vectorized; looping in python is SLOW.
         # Vectorized version will receive a bonus. i.e., the functions take all particles as the input and process them in a vector.
-        for m in range(0, num_particles):
+        for start in range(0, num_particles, batch_size):
+            
+            end = min(start+batch_size, num_particles)
+
             """
             MOTION MODEL
             """
-            x_t0 = X_bar[m, 0:3]
+            x_t0 = X_bar[start:end, 0:3]
             x_t1 = motion_model.update(u_t0, u_t1, x_t0)
 
             """
@@ -155,9 +162,9 @@ if __name__ == '__main__':
             if (meas_type == "L"):
                 z_t = ranges
                 w_t = sensor_model.beam_range_finder_model(z_t, x_t1)
-                X_bar_new[m, :] = np.hstack((x_t1, w_t))
+                X_bar_new[start:end, :] = np.hstack((x_t1, w_t))
             else:
-                X_bar_new[m, :] = np.hstack((x_t1, X_bar[m, 3]))
+                X_bar_new[start:end, :] = np.hstack((x_t1, X_bar[m, 3]))
 
         X_bar = X_bar_new
         u_t0 = u_t1
