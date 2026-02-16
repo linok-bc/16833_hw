@@ -17,11 +17,12 @@ class SensorModel:
     References: Thrun, Sebastian, Wolfram Burgard, and Dieter Fox. Probabilistic robotics. MIT press, 2005.
     [Chapter 6.3]
     """
-    def __init__(self, occupancy_map):
+    def __init__(self, map_reader):
         """
         TODO : Tune Sensor Model parameters here
         The original numbers are for reference but HAVE TO be tuned.
         """
+        self.map_reader = map_reader
         self._z_hit = 1
         self._z_short = 0.1
         self._z_max = 0.1
@@ -43,11 +44,13 @@ class SensorModel:
         # Used for processing the data in batches; adjust based on memory contraints (especially with these RAM prices)
         self._batch_size = 10
        
-    def ray_casting(self, x_t1, map_reader):
+    def ray_casting(self, x_t1):
         """
         param[in] x_t1 : particle state belief [x, y, theta] at time t [world_frame]; has shape [self._batch_size, 3]
         param[in] map_reader : representation of the environment using the MapReader class
         param[out] out : estimated distance (in # of cm) before the robot hits an obstacle; shape [self._batch_size, 180//self._subsampling]
+        
+        got rid of map_reader param cuz we're passing into constructor
         """
 
         """
@@ -59,7 +62,7 @@ class SensorModel:
         """
 
         # by default, coordinates are stored in absolute terms (i.e. cm) rather than map units
-        max_range_units = np.ceil(self._max_range / map_reader._resolution).astype(np.uintp)
+        max_range_units = np.ceil(self._max_range / self.map_reader._resolution).astype(np.uintp)
 
         # for each particle, convert to (subsampled) rays in the hemisphere of the robot's direction
         x_t1_cone = np.repeat(np.expand_dims(x_t1, 1), 180 // self._subsampling, 1)
@@ -72,22 +75,22 @@ class SensorModel:
         
         # unfortunately we need to sample along each direction a lot; RAM goes whee
         x_t1_cone = np.repeat(np.expand_dims(x_t1_cone, 2), max_range_units, axis=2)        # [batch_size, num_samples, max_range_units, 4]
-        x_t1_cone[:, :, :, 2:] *= (np.array(range(max_range_units)) * map_reader._resolution) 
+        x_t1_cone[:, :, :, 2:] *= (np.array(range(max_range_units)) * self.map_reader._resolution) 
 
         # convert from position + offset to new position (e.g (x, dx) -> (x+dx))
         x_t1_cone = x_t1_cone[..., :2] + x_t1_cone[..., 2:]                                 # [batch_size, num_samples, max_range_units, 2]
 
         # convert resolution of these units from cm to map units, and snap to grid
-        x_t1_cone /= map_reader._resolution
+        x_t1_cone /= self.map_reader._resolution
         x_t1_cone = np.round(x_t1_cone)
 
         # handles cases for when we leave the grid; clipping is equivalent to repeating the behavior at the edge of the grid
-        x_t1_cone[..., 0] = np.clip(x_t1_cone[..., 0], 0, map_reader._occupancy_map.shape[0]-1)
-        x_t1_cone[..., 1] = np.clip(x_t1_cone[..., 1], 0, map_reader._occupancy_map.shape[1]-1)
+        x_t1_cone[..., 0] = np.clip(x_t1_cone[..., 0], 0, self.map_reader._occupancy_map.shape[0]-1)
+        x_t1_cone[..., 1] = np.clip(x_t1_cone[..., 1], 0, self.map_reader._occupancy_map.shape[1]-1)
         x_t1_cone = x_t1_cone.astype(np.uintp)
 
         # convert from indices of grid to occupancy score 
-        x_t1_cone = map_reader.get_map()[x_t1_cone[..., 0], x_t1_cone[..., 1]]              # [batch_size, num_samples, max_range_units]
+        x_t1_cone = self.map_reader.get_map()[x_t1_cone[..., 0], x_t1_cone[..., 1]]              # [batch_size, num_samples, max_range_units]
 
         # threshold occupancy score to get a binary mask, then convert to distance to the nearest obstacle (or max)
         x_t1_cone = x_t1_cone >= self._min_probability
@@ -96,7 +99,7 @@ class SensorModel:
             np.array(range(max_range_units))[np.newaxis, np.newaxis, :], 
             max_range_units
         ).min(axis=-1) 
-        x_t1_cone *= map_reader._resolution         
+        x_t1_cone *= self.map_reader._resolution         
 
         return x_t1_cone
 
@@ -104,65 +107,69 @@ class SensorModel:
     def beam_range_finder_model(self, z_t1_arr, x_t1):
         """
         param[in] z_t1_arr : laser range readings [array of 180 values] at time t
-        param[in] x_t1 : particle state belief [x, y, theta] at time t [world_frame]; has shape [num_particles, 3]
-        param[in] step : step at which to draw samples from the beam_range finer
-        param[out] prob_zt1 : likelihood of a range scan zt1 at time t; should have shape [num_particles,]
+        param[in] x_t1 : particle state belief [x, y, theta] at time t [world_frame]
+        param[out] prob_zt1 : likelihood of a range scan zt1 at time t
+        
+        
+        
+        z_t1_arr is size 180 array of scalar laser range readings at time t
+        x_t1 is single particle pose (x,y, heading)
+        we want to return scalar likelihood we get range scan z_t1_arr given we're at position x_t1
+        
         """
+        
         """
         TODO : Add your code here
         """
-
-        # only consider a portion of z_t1_arr to save on computation
-        z_t1_sample = z_t1_arr[::self._subsampling]
-
-        # From chapter 6.3, we will consider four different types of noise and four corresponding distributions
+        # prob_zt1 = 1.0
+        # return prob_zt1
         
-        ##########
-        # (1) local measurement noise, which is modelled with a Gaussian
-        ##########
+        eps = 1e-8 # use in log sum at end to avoid log(0)
+        z_max = self._max_range
         
-        # minimum # of std. dev.'s: z_t1 / sigma_hit
-        # maximum # of std. dev.'s: (self._max_range - z_t1) / sigma_hit
-        lower_cdf = norm.cdf(-(z_t1_arr_sample / self._sigma_hit))
-        upper_cdf = norm.cdf((self._max_range - z_t1_arr_sample) / self._sigma_hit)
+        # subsample so that measured scan matches scan from raycasting
+        z = np.array(z_t1_arr, dtype=float)
+        z = z[::self._subsampling]
         
-        # get noise samples in terms of cdf values, then convert to # of std. dev.'s
-        noise_samples = np.random.uniform(lower_cdf, upper_cdf, size=z_t1_arr_sample.shape)
-        noise_samples = norm.ppf(noise_samples, scale=self._sigma_hit)
-
-        # add noise to z_t1 samples to get z_hit
-        z_hit = z_t1_arr_sample + noise_samples
-
-        ##########
-        # (2) unexpected obstacles, which we model with an exponential
-        ##########
+        # clamp to make sure we're not over max
+        z = np.clip(z, 0, z_max)
         
-        # minimum's c.d. is just at 0
-        # maximum's c.d. is at c.d. of the measurement
-        lower_cdf = expon.cdf(0)
-        upper_cdf = expon.cdf(z_t1_arr_sample, scale=1/self._lambda_short)
+        # get predicted scan by raycasting for batch size 1 (single position)
+        x = np.array(x_t1, dtype=float).reshape(1,3)
+        
+        z_star = self.ray_casting(x)[0]  # should be 1d
+        z_star = np.clip(z_star, 0, z_max)
+        
+        # ok so now z and z star should be same length
+        assert(len(z) == len(z_star))
+        # now we can iterate through k, and calculate the mixture for each one
+        likelihoods = []
+        for z_k, z_k_star in zip(z, z_star):
+        
+            # 1. calc phit
+            # gaussian pdf center zkstar with sigma hit, eval at zk
+            phit = norm.pdf(z_k, loc=z_k_star, scale=self._sigma_hit) if (0 <= z_k <= z_max) else 0
+            # 2. calc pshort
+            pshort = expon.pdf(z_k, loc=0, scale=1/self._lambda_short) if (0 <= z_k <= z_k_star) else 0
+            # 3. calc pmax
+            pmax = 1 if (z_k == z_max) else 0
+            # 4. calc prand
+            prand = 1/z_max if (0 <= z_k < z_max) else 0
+            
+            # note coef self._z_max_ is different from max sensor range z_max
+            mixture = self._z_hit * phit + self._z_short * pshort + self._z_max * pmax + self._z_rand * prand
+            
+            # likelihoods.append(mixture + eps)  # avoid log(0)
+            likelihoods.append(mixture + eps)  # don't want 0 likelihood
 
-        # get noise values in terms of c.d. values, then convert
-        noise_samples = np.random.uniform(lower_cdf, upper_cdf, size=z_t1_arr_sample.shape)
-        noise_samples = expon.ppf(noise_samples, scale=1/self._lambda_short)
-        z_short = noise_samples
+        
+        # return log likelihod
+        # actually assignment says in practice product works better?
+        return np.prod(likelihoods)
+        return np.sum(np.log(likelihoods))
+            
+            
+            
+    
+    
 
-        ##########
-        # (3) sensor failure, which we model with a point-mass distribution
-        ##########
-        z_max = np.repeat(np.array([[self._max_range]]), z_t1_arr_sample.shape, axis=0)
-
-        ##########
-        # (4) random measurement error, which we model with a uniform distribution
-        ##########
-        z_rand = np.random.uniform(low=0, high=self._max_range, size=z_t1_arr_sample.shape)
-
-        # now we calculate weighed averages, using matrix multiplication to go wheee
-        z_all = np.stack([z_hit, z_short, z_max, z_rand])
-        weights = np.array([self._z_hit, self._z_short, self._z_max, self._z_rand])
-        weights /= weights.sum()
-        weighted_z_all = weights @ z_all
-
-
-        prob_zt1 = 0
-        return prob_zt1

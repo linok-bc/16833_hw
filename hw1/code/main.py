@@ -96,7 +96,8 @@ if __name__ == '__main__':
     logfile = open(src_path_log, 'r')
 
     motion_model = MotionModel()
-    sensor_model = SensorModel(occupancy_map)
+    # sensor_model = SensorModel(occupancy_map)
+    sensor_model = SensorModel(map_obj)  #changed
     resampler = Resampling()
 
     num_particles = args.num_particles
