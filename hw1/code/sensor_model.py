@@ -81,7 +81,7 @@ class SensorModel:
         
         # unfortunately we need to sample along each direction a lot; RAM goes whee
         x_t1_cone = np.repeat(np.expand_dims(x_t1_cone, 2), max_range_units, axis=2)        # [batch_size, num_samples, max_range_units, 4]
-        x_t1_cone[:, :, :, 2:] *= (np.array(range(max_range_units)) * self.map_reader._resolution) 
+        x_t1_cone[:, :, :, 2:] *= (np.array(range(max_range_units)) * self.map_reader._resolution)[np.newaxis, np.newaxis, :, np.newaxis] 
 
         # convert from position + offset to new position (e.g (x, dx) -> (x+dx))
         x_t1_cone = x_t1_cone[..., :2] + x_t1_cone[..., 2:]                                 # [batch_size, num_samples, max_range_units, 2]
