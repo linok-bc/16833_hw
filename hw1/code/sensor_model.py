@@ -110,71 +110,135 @@ class SensorModel:
         return x_t1_cone
 
 
-    def beam_range_finder_model(self, z_t1_arr, x_t1):
-        """
-        param[in] z_t1_arr : laser range readings [array of 180 values] at time t
-        param[in] x_t1 : particle state belief [x, y, theta] at time t [world_frame]
-        param[out] prob_zt1 : likelihood of a range scan zt1 at time t
+    # def beam_range_finder_model(self, z_t1_arr, x_t1):
+    #     """
+    #     param[in] z_t1_arr : laser range readings [array of 180 values] at time t
+    #     param[in] x_t1 : particle state belief [x, y, theta] at time t [world_frame]
+    #     param[out] prob_zt1 : likelihood of a range scan zt1 at time t
         
         
         
-        z_t1_arr is size 180 array of scalar laser range readings at time t
-        x_t1 is single particle pose (x,y, heading)
-        we want to return scalar likelihood we get range scan z_t1_arr given we're at position x_t1
+    #     z_t1_arr is size 180 array of scalar laser range readings at time t
+    #     x_t1 is single particle pose (x,y, heading)
+    #     we want to return scalar likelihood we get range scan z_t1_arr given we're at position x_t1
         
-        """
+    #     """
         
-        """
-        TODO : Add your code here
-        """
-        # prob_zt1 = 1.0
-        # return prob_zt1
+    #     """
+    #     TODO : Add your code here
+    #     """
+    #     # prob_zt1 = 1.0
+    #     # return prob_zt1
         
-        eps = 1e-8 # use in log sum at end to avoid log(0)
-        z_max = self._max_range
+    #     eps = 1e-8 # use in log sum at end to avoid log(0)
+    #     z_max = self._max_range
         
-        # subsample so that measured scan matches scan from raycasting
-        z = np.array(z_t1_arr, dtype=float)
-        z = z[::self._subsampling]
+    #     # subsample so that measured scan matches scan from raycasting
+    #     z = np.array(z_t1_arr, dtype=float)
+    #     z = z[::self._subsampling]
         
-        # clamp to make sure we're not over max
-        z = np.clip(z, 0, z_max)
+    #     # clamp to make sure we're not over max
+    #     z = np.clip(z, 0, z_max)
         
-        # get predicted scan by raycasting for batch size 1 (single position)
-        x = np.array(x_t1, dtype=float).reshape(1,3)
+    #     # get predicted scan by raycasting for batch size 1 (single position)
+    #     x = np.array(x_t1, dtype=float).reshape(1,3)
         
-        z_star = self.ray_casting(x)[0]  # should be 1d
-        z_star = np.clip(z_star, 0, z_max)
+    #     z_star = self.ray_casting(x)[0]  # should be 1d
+    #     z_star = np.clip(z_star, 0, z_max)
         
-        # ok so now z and z star should be same length
-        assert(len(z) == len(z_star))
-        # now we can iterate through k, and calculate the mixture for each one
-        likelihoods = []
-        for z_k, z_k_star in zip(z, z_star):
+    #     # ok so now z and z star should be same length
+    #     assert(len(z) == len(z_star))
+    #     # now we can iterate through k, and calculate the mixture for each one
+    #     likelihoods = []
+    #     for z_k, z_k_star in zip(z, z_star):
         
-            # 1. calc phit
-            # gaussian pdf center zkstar with sigma hit, eval at zk
-            phit = norm.pdf(z_k, loc=z_k_star, scale=self._sigma_hit) if (0 <= z_k <= z_max) else 0
-            # 2. calc pshort
-            pshort = expon.pdf(z_k, loc=0, scale=1/self._lambda_short) if (0 <= z_k <= z_k_star) else 0
-            # 3. calc pmax
-            pmax = 1 if (z_k == z_max) else 0
-            # 4. calc prand
-            # prand = 1/z_max if (0 <= z_k < z_max) else 0
-            pmax = 1.0 if z_k >= z_max - 1e-3 else 0.0  # use small tolerance instead of exact equality
+    #         # 1. calc phit
+    #         # gaussian pdf center zkstar with sigma hit, eval at zk
+    #         phit = norm.pdf(z_k, loc=z_k_star, scale=self._sigma_hit) if (0 <= z_k <= z_max) else 0
+    #         # 2. calc pshort
+    #         pshort = expon.pdf(z_k, loc=0, scale=1/self._lambda_short) if (0 <= z_k <= z_k_star) else 0
+    #         # 3. calc pmax
+    #         pmax = 1 if (z_k == z_max) else 0
+    #         # 4. calc prand
+    #         # prand = 1/z_max if (0 <= z_k < z_max) else 0
+    #         pmax = 1.0 if z_k >= z_max - 1e-3 else 0.0  # use small tolerance instead of exact equality
             
-            # note coef self._z_max_ is different from max sensor range z_max
-            mixture = self._z_hit * phit + self._z_short * pshort + self._z_max * pmax + self._z_rand * prand
+    #         # note coef self._z_max_ is different from max sensor range z_max
+    #         mixture = self._z_hit * phit + self._z_short * pshort + self._z_max * pmax + self._z_rand * prand
             
-            # likelihoods.append(mixture + eps)  # avoid log(0)
-            likelihoods.append(mixture + eps)  # don't want 0 likelihood
+    #         # likelihoods.append(mixture + eps)  # avoid log(0)
+    #         likelihoods.append(mixture + eps)  # don't want 0 likelihood
 
         
-        # return log likelihod
-        # actually assignment says in practice product works better?
-        return np.prod(likelihoods)
-        # return np.sum(np.log(likelihoods))
-            
+    #     # return log likelihod
+    #     # actually assignment says in practice product works better?
+    #     return np.prod(likelihoods)
+    #     # return np.sum(np.log(likelihoods))
+    
+    def beam_range_finder_model(self, z_t1_arr, x_t1):
+        """
+        Batched sensor model.
+
+        param[in] z_t1_arr : laser range readings [array of 180 values] at time t
+        param[in] x_t1 : particle states [B,3] (or [3]) at time t [world_frame]
+        param[out] prob_zt1 : likelihood per particle, shape [B]
+        """
+
+        eps = 1e-8
+        z_max = float(self._max_range)
+
+        # --- z: subsample once (shared across particles) ---
+        z = np.asarray(z_t1_arr, dtype=np.float64)[::self._subsampling]
+        z = np.clip(z, 0.0, z_max)                              # [K]
+        K = z.shape[0]
+
+        # --- x: ensure batched ---
+        x = np.asarray(x_t1, dtype=np.float64)
+        if x.ndim == 1:
+            x = x.reshape(1, 3)
+        assert x.ndim == 2 and x.shape[1] == 3
+        B = x.shape[0]
+
+        # --- predicted ranges for all particles ---
+        z_star = self.ray_casting(x)                            # [B, K]
+        z_star = np.clip(z_star, 0.0, z_max)
+
+        # --- vectorized mixture components over [B,K] ---
+        # broadcast z to [B,K]
+        z_bk = z[None, :]                                       # [1, K] -> broadcast to [B, K]
+
+        # p_hit: Gaussian pdf N(z; z*, sigma) on [0, z_max]
+        phit = norm.pdf(z_bk, loc=z_star, scale=self._sigma_hit)  # [B, K]
+        phit *= ((z_bk >= 0.0) & (z_bk <= z_max))
+
+        # p_short: exponential on [0, z*]
+        # scipy expon.pdf(x, scale=1/lambda) == lambda * exp(-lambda x)
+        pshort = expon.pdf(z_bk, loc=0.0, scale=1.0 / self._lambda_short)  # [B, K]
+        pshort *= ((z_bk >= 0.0) & (z_bk <= z_star))
+
+        # p_max: point mass at z_max (use tolerance)
+        pmax = (z_bk >= (z_max - 1e-3)).astype(np.float64)       # [B, K]
+
+        # p_rand: uniform on [0, z_max)
+        prand = (1.0 / z_max) * ((z_bk >= 0.0) & (z_bk < z_max)) # [B, K]
+
+        # mixture per beam
+        mix = (
+            self._z_hit   * phit +
+            self._z_short * pshort +
+            self._z_max   * pmax +
+            self._z_rand  * prand
+        )                                                        # [B, K]
+
+        mix = mix + eps
+
+        # --- return per-particle likelihood ---
+        # product version (as assignment tip suggests); may underflow if K is large
+        return np.prod(mix, axis=1)                               # [B]
+
+        # If you instead want the numerically-stable log-likelihood, use:
+        # return np.sum(np.log(mix), axis=1)     
+                
             
             
     
