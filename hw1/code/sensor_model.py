@@ -27,15 +27,25 @@ class SensorModel:
         # self._z_short = 0.1
         # self._z_max = 0.1
         # self._z_rand = 100
-        self._z_hit   = 0.80
-        self._z_short = 0.10
-        self._z_max   = 0.05
-        self._z_rand  = 0.05
+        #self._z_hit   = 0.80
+        #self._z_short = 0.10
+        #self._z_max   = 0.05
+        #self._z_rand  = 0.05
 
         # self._sigma_hit = 50
         # self._lambda_short = 0.1
-        self._sigma_hit = 60.0      # cm (start 50–100)
-        self._lambda_short = 0.01   # 1/cm  (mean 100 cm)
+        #self._sigma_hit = 60.0      # cm (start 50–100)
+        #self._lambda_short = 0.01   # 1/cm  (mean 100 cm)
+        self._z_hit   = 5
+        self._z_short = 2
+        self._z_max   = 1
+        self._z_rand  = 250
+        self._sigma_hit = 50
+        self._lambda_short = 0.1
+        
+        
+        self._sigma_hit = 60.0
+        self._lambda_short = 0.01 
 
         # Used in p_max and p_rand, optionally in ray casting
         # For this project, we seem to be using cm; so this will be 100 grid units assuming that it's isotropic w/ 10cm res.
