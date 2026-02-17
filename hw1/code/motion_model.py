@@ -21,8 +21,8 @@ class MotionModel:
         """
         self._alpha1 = 0.01
         self._alpha2 = 0.01
-        self._alpha3 = 0.01
-        self._alpha4 = 0.01
+        self._alpha3 = 0.1
+        self._alpha4 = 0.1
 
     def sample(self, d_rot1, d_trans, d_rot2, batch_size):
         """
