@@ -56,11 +56,28 @@ def init_particles_random(num_particles, occupancy_map):
 def init_particles_freespace(num_particles, occupancy_map):
 
     # initialize [x, y, theta] positions in world_frame for all particles
-    """
-    TODO : Add your code here
-    This version converges faster than init_particles_random
-    """
-    X_bar_init = np.zeros((num_particles, 4))
+    # occupancy_map values:
+    #   -1: unknown
+    #    0: free
+    #    1: occupied
+    # Treat low occupancy probabilities as free space and sample only from those cells.
+    free_threshold = 0.10
+    free_mask = (occupancy_map >= 0.0) & (occupancy_map <= free_threshold)
+    free_cells = np.argwhere(free_mask)[:, ::-1]  #argwhere default is row, col, we want x,y
+
+
+    # Sample free cells with replacement; map resolution is 10 cm per cell.
+    chosen = free_cells[np.random.choice(free_cells.shape[0], size=num_particles, replace=True)]
+    resolution_cm = 10.0
+    x0_vals = (chosen[:, 0:1] + np.random.rand(num_particles, 1)) * resolution_cm
+    y0_vals = (chosen[:, 1:2] + np.random.rand(num_particles, 1)) * resolution_cm
+    theta0_vals = np.random.uniform(-np.pi, np.pi, (num_particles, 1))
+
+    # initialize weights for all particles
+    w0_vals = np.ones((num_particles, 1), dtype=np.float64)
+    w0_vals = w0_vals / num_particles
+
+    X_bar_init = np.hstack((x0_vals, y0_vals, theta0_vals, w0_vals))
 
     return X_bar_init
 
@@ -82,7 +99,8 @@ if __name__ == '__main__':
     parser.add_argument('--path_to_map', default='../data/map/wean.dat')
     parser.add_argument('--path_to_log', default='../data/log/robotdata1.log')
     parser.add_argument('--output', default='results')
-    parser.add_argument('--batch_size', default=10, type=int)
+    parser.add_argument('--batch_size', default=500, type=int)
+    parser.add_argument('--subsampling', default=3, type=int)
     parser.add_argument('--num_particles', default=500, type=int)
     parser.add_argument('--visualize', action='store_true')
     args = parser.parse_args()
@@ -97,12 +115,12 @@ if __name__ == '__main__':
 
     motion_model = MotionModel()
     # sensor_model = SensorModel(occupancy_map)
-    sensor_model = SensorModel(map_obj, batch_size=args.batch_size)  #changed
+    sensor_model = SensorModel(map_obj, subsampling=args.subsampling, batch_size=args.batch_size)  #changed
     resampler = Resampling()
 
     num_particles = args.num_particles
-    X_bar = init_particles_random(num_particles, occupancy_map)
-    # X_bar = init_particles_freespace(num_particles, occupancy_map)
+    # X_bar = init_particles_random(num_particles, occupancy_map)
+    X_bar = init_particles_freespace(num_particles, occupancy_map)
 
     batch_size = args.batch_size
 

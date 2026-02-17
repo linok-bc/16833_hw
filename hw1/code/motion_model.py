@@ -36,9 +36,9 @@ class MotionModel:
         """
 
         # (1) calculate standard deviations of noise Gaussians
-        std_rot1 = self._alpha1 * d_rot1 ** 2 + self._alpha2 * d_trans ** 2
-        std_trans = self._alpha3 * (d_rot1 ** 2 + d_rot2 ** 2) + self._alpha4 * d_trans ** 2
-        std_rot2 = self._alpha1 * d_rot2 ** 2 + self._alpha2 * d_trans ** 2
+        std_rot1 = self._alpha1 * np.abs(d_rot1) + self._alpha2 * np.abs(d_trans)
+        std_trans = self._alpha3 * (np.abs(d_rot1) + np.abs(d_rot2)) + self._alpha4 * np.abs(d_trans)
+        std_rot2 = self._alpha1 * np.abs(d_rot2) + self._alpha2 * np.abs(d_trans)
 
         # (2) sample noise from distributions. We don't need to scale since \sigma already depends on the translation 
         noise_rot1 = np.random.normal(loc=0, scale=std_rot1, size=batch_size)
@@ -88,6 +88,9 @@ class MotionModel:
         d_trans = np.sqrt(dy**2 + dx**2)
         d_rot2 = dtheta - d_rot1
 
+        d_rot1 = np.arctan2(np.sin(d_rot1), np.cos(d_rot1))
+        d_rot2 = np.arctan2(np.sin(d_rot2), np.cos(d_rot2))
+
         # (2) add sampled noise to estimated rotations and translation
         x_noise = self.sample(d_rot1, d_trans, d_rot2, x_t0.shape[0])
         du_noisy = np.array([d_rot1, d_trans, d_rot2])[np.newaxis, :] + x_noise
@@ -97,6 +100,7 @@ class MotionModel:
         du_x = du_trans * np.cos(x_t0[:, 2] + du_rot1)
         du_y = du_trans * np.sin(x_t0[:, 2] + du_rot1)
         du_theta = du_rot1 + du_rot2
+        du_theta = np.arctan2(np.sin(du_theta), np.cos(du_theta))
         x_t1 = x_t0 + np.stack([du_x, du_y, du_theta], axis=-1)
         
         return x_t1

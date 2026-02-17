@@ -40,8 +40,8 @@ class SensorModel:
         self._z_short = 2
         self._z_max   = 1
         self._z_rand  = 250
-        self._sigma_hit = 50
-        self._lambda_short = 0.1
+        # self._sigma_hit = 50
+        # self._lambda_short = 0.1
         
         
         self._sigma_hit = 60.0
