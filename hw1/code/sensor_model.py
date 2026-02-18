@@ -53,6 +53,9 @@ class SensorModel:
 
         # Used for thresholding obstacles of the occupancy map
         self._min_probability = 0.35
+        
+        # Laser origin is offset from robot center by +x in robot frame (cm).
+        self._laser_offset = 25.0
 
         # Used in sampling angles in ray casting
         self._subsampling = subsampling
@@ -79,10 +82,16 @@ class SensorModel:
 
         # by default, coordinates are stored in absolute terms (i.e. cm) rather than map units
         max_range_units = np.ceil(self._max_range / self.map_reader._resolution).astype(np.uintp)
+        num_beams = len(range(-90, 90, self._subsampling))
 
         # for each particle, convert to (subsampled) rays in the hemisphere of the robot's direction
-        x_t1_cone = np.repeat(np.expand_dims(x_t1, 1), 180 // self._subsampling, 1)
-        x_t1_cone[:, :, 2] -= np.array(range(-90, 90, self._subsampling)) * (np.pi / 180)   # [batch_size, num_samples, 3]
+        x_t1_cone = np.repeat(np.expand_dims(x_t1, 1), num_beams, 1)
+        
+        # Shift ray origin from robot center to laser frame: +x axis of robot frame.
+        x_t1_cone[:, :, 0] += self._laser_offset * np.cos(x_t1_cone[:, :, 2])
+        x_t1_cone[:, :, 1] += self._laser_offset * np.sin(x_t1_cone[:, :, 2])
+        # Log beams are ordered right->left. Use -90..+90 degrees in that same order.
+        x_t1_cone[:, :, 2] += np.array(range(-90, 90, self._subsampling)) * (np.pi / 180)   # [batch_size, num_samples, 3]
 
         # currently we have [x, y, theta]; let's convert that to [x, y, dx, dy] through sin/cos
         x_t1_cone = np.dstack([x_t1_cone, x_t1_cone[:, :, 2]])
@@ -96,23 +105,21 @@ class SensorModel:
         # convert from position + offset to new position (e.g (x, dx) -> (x+dx))
         x_t1_cone = x_t1_cone[..., :2] + x_t1_cone[..., 2:]                                 # [batch_size, num_samples, max_range_units, 2]
 
-        # convert resolution of these units from cm to map units, and snap to grid
+        # Convert cm coordinates to map cells (x -> column, y -> row).
         x_t1_cone /= self.map_reader._resolution
         x_t1_cone = np.round(x_t1_cone)
+        map_h, map_w = self.map_reader._occupancy_map.shape
+        x_idx = np.clip(x_t1_cone[..., 0], 0, map_w - 1).astype(np.uintp)
+        y_idx = np.clip(x_t1_cone[..., 1], 0, map_h - 1).astype(np.uintp)
 
-        # handles cases for when we leave the grid; clipping is equivalent to repeating the behavior at the edge of the grid
-        x_t1_cone[..., 0] = np.clip(x_t1_cone[..., 0], 0, self.map_reader._occupancy_map.shape[0]-1)
-        x_t1_cone[..., 1] = np.clip(x_t1_cone[..., 1], 0, self.map_reader._occupancy_map.shape[1]-1)
-        x_t1_cone = x_t1_cone.astype(np.uintp)
-
-        # convert from indices of grid to occupancy score 
-        x_t1_cone = self.map_reader.get_map()[x_t1_cone[..., 0], x_t1_cone[..., 1]]              # [batch_size, num_samples, max_range_units]
+        # convert from indices of grid to occupancy score
+        x_t1_cone = self.map_reader.get_map()[y_idx, x_idx]                                      # [batch_size, num_samples, max_range_units]
 
         # threshold occupancy score to get a binary mask, then convert to distance to the nearest obstacle (or max)
         x_t1_cone = x_t1_cone >= self._min_probability
         x_t1_cone = np.where(                                                               # [batch_size, num_samples]
             x_t1_cone, 
-            np.array(range(max_range_units))[np.newaxis, np.newaxis, :], 
+            np.array(range(max_range_units))[np.newaxis, np.newaxis, :],
             max_range_units
         ).min(axis=-1) 
         x_t1_cone *= self.map_reader._resolution         
@@ -208,6 +215,17 @@ class SensorModel:
             x = x.reshape(1, 3)
         assert x.ndim == 2 and x.shape[1] == 3
         B = x.shape[0]
+        
+        # Penalize particles that are outside map extents.
+        map_h, map_w = self.map_reader.get_map().shape
+        res = self.map_reader._resolution
+        x_max = map_w * res
+        y_max = map_h * res
+
+        in_bounds = (
+            (x[:, 0] >= 0.0) & (x[:, 0] < x_max) &
+            (x[:, 1] >= 0.0) & (x[:, 1] < y_max)
+        )
 
         # --- predicted ranges for all particles ---
         z_star = self.ray_casting(x)                            # [B, K]
@@ -216,7 +234,7 @@ class SensorModel:
         # --- vectorized mixture components over [B,K] ---
         # broadcast z to [B,K]
         z_bk = z[None, :]                                       # [1, K] -> broadcast to [B, K]
-        z_bk = np.repeat(z_bk, z_star.shape[0] ,axis=0)
+        z_bk = np.repeat(z_bk, z_star.shape[0], axis=0)
 
         # p_hit: Gaussian pdf N(z; z*, sigma) on [0, z_max]
         phit = norm.pdf(z_bk, loc=z_star, scale=self._sigma_hit)  # [B, K]
@@ -245,7 +263,9 @@ class SensorModel:
 
         # --- return per-particle likelihood ---
         # product version (as assignment tip suggests); may underflow if K is large
-        return np.prod(mix, axis=1)                               # [B]
+        prob_zt1 = np.prod(mix, axis=1)                         # [B]
+        prob_zt1[~in_bounds] = 0.0
+        return prob_zt1
 
         # If you instead want the numerically-stable log-likelihood, use:
         # return np.sum(np.log(mix), axis=1)     
@@ -254,4 +274,3 @@ class SensorModel:
             
     
     
-

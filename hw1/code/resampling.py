@@ -17,6 +17,15 @@ class Resampling:
         TODO : Initialize resampling process parameters here
         """
 
+    @staticmethod
+    def _normalize_weights(w):
+        """Normalize weights robustly; fall back to uniform if degenerate."""
+        w = np.asarray(w, dtype=np.float64)
+        total = np.sum(w)
+        if (not np.isfinite(total)) or total <= 0.0:
+            return np.ones_like(w, dtype=np.float64) / w.shape[0]
+        return w / total
+
     def multinomial_sampler(self, X_bar):
         """
         param[in] X_bar : [num_particles x 4] sized array containing [x, y, theta, wt] values for all particles
@@ -33,8 +42,7 @@ class Resampling:
         # return X_bar_resampled
         
         # normalized weights to get probs
-        w = X_bar[:, 3]
-        w = w / np.sum(w)
+        w = self._normalize_weights(X_bar[:, 3])
         
         # now we sample indices
         N = X_bar.shape[0]
@@ -61,8 +69,7 @@ class Resampling:
         # return X_bar_resampled
         
         # normalize weights 
-        w = X_bar[:, 3]
-        w = w / np.sum(w)
+        w = self._normalize_weights(X_bar[:, 3])
         
         # calc cum weights
         cum_weights = np.cumsum(w) # should be length N, [-1] = 1
@@ -94,4 +101,3 @@ class Resampling:
         return X_bar_resampled
                 
             
-

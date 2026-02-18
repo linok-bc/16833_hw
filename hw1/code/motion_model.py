@@ -24,6 +24,11 @@ class MotionModel:
         self._alpha3 = 0.1
         self._alpha4 = 0.1
 
+    @staticmethod
+    def _wrap_to_pi(angle):
+        """Wrap angle(s) to [-pi, pi]. Works for scalars or numpy arrays."""
+        return np.arctan2(np.sin(angle), np.cos(angle))
+
     def sample(self, d_rot1, d_trans, d_rot2, batch_size):
         """
         Sample noise to add to our odometry estimates. Each sample in x_t0 gets its own noise sample
@@ -85,11 +90,19 @@ class MotionModel:
 
         # (1) calculate rotations and translations
         d_rot1 = np.arctan2(dy, dx) - u_t0[2]
+        
+        #what are we subtracting
         d_trans = np.sqrt(dy**2 + dx**2)
         d_rot2 = dtheta - d_rot1
-
-        d_rot1 = np.arctan2(np.sin(d_rot1), np.cos(d_rot1))
-        d_rot2 = np.arctan2(np.sin(d_rot2), np.cos(d_rot2))
+        # arc tan is 0 to pi, we want pi/2 to -pi/2 ??
+        # % 2 pi
+        # check outputs
+        # check ranges
+        # add pi, then mod2pi
+        
+        d_rot1 = self._wrap_to_pi(d_rot1)
+        d_rot2 = self._wrap_to_pi(d_rot2)
+        # print(f'{round(d_rot1/math.pi, 2)}pi, {round(d_rot2/math.pi, 2)}pi')
 
         # (2) add sampled noise to estimated rotations and translation
         x_noise = self.sample(d_rot1, d_trans, d_rot2, x_t0.shape[0])
@@ -99,8 +112,8 @@ class MotionModel:
         # (3) convert noisy rotation and translations to changes in position and orientation
         du_x = du_trans * np.cos(x_t0[:, 2] + du_rot1)
         du_y = du_trans * np.sin(x_t0[:, 2] + du_rot1)
-        du_theta = du_rot1 + du_rot2
-        du_theta = np.arctan2(np.sin(du_theta), np.cos(du_theta))
+        du_theta = self._wrap_to_pi(du_rot1 + du_rot2)
         x_t1 = x_t0 + np.stack([du_x, du_y, du_theta], axis=-1)
+        x_t1[:, 2] = self._wrap_to_pi(x_t1[:, 2])
         
         return x_t1

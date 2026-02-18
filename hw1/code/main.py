@@ -82,7 +82,35 @@ def init_particles_freespace(num_particles, occupancy_map):
     return X_bar_init
 
 
+def init_particles_debug(num_particles, occupancy_map):
+
+    # initialize [x, y, theta] positions in world_frame for all particles
+    # sample in a 50x50 cm square centered at (4000, 4000)
+    center_x, center_y = 4000.0, 4000.0
+    half_width = 25.0
+    map_size_x = occupancy_map.shape[0] * 10.0
+    map_size_y = occupancy_map.shape[1] * 10.0
+
+    x_min = max(0.0, center_x - half_width)
+    x_max = min(map_size_x, center_x + half_width)
+    y_min = max(0.0, center_y - half_width)
+    y_max = min(map_size_y, center_y + half_width)
+
+    x0_vals = np.random.uniform(x_min, x_max, (num_particles, 1))
+    y0_vals = np.random.uniform(y_min, y_max, (num_particles, 1))
+    theta0_vals = np.random.uniform(-np.pi, np.pi, (num_particles, 1))
+
+    # initialize weights for all particles
+    w0_vals = np.ones((num_particles, 1), dtype=np.float64)
+    w0_vals = w0_vals / num_particles
+
+    X_bar_init = np.hstack((x0_vals, y0_vals, theta0_vals, w0_vals))
+
+    return X_bar_init
+
+
 if __name__ == '__main__':
+    np.random.seed(13)
     """
     Description of variables used
     u_t0 : particle state odometry reading [x, y, theta] at time (t-1) [odometry_frame]
@@ -98,10 +126,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--path_to_map', default='../data/map/wean.dat')
     parser.add_argument('--path_to_log', default='../data/log/robotdata1.log')
-    parser.add_argument('--output', default='results')
+    parser.add_argument('--output', default='results2000parts_debuginit')
     parser.add_argument('--batch_size', default=500, type=int)
     parser.add_argument('--subsampling', default=3, type=int)
-    parser.add_argument('--num_particles', default=500, type=int)
+    parser.add_argument('--num_particles', default=2000, type=int)
     parser.add_argument('--visualize', action='store_true')
     args = parser.parse_args()
 
@@ -120,7 +148,9 @@ if __name__ == '__main__':
 
     num_particles = args.num_particles
     # X_bar = init_particles_random(num_particles, occupancy_map)
-    X_bar = init_particles_freespace(num_particles, occupancy_map)
+    # X_bar = init_particles_freespace(num_particles, occupancy_map)
+    X_bar = init_particles_debug(num_particles, occupancy_map)
+    
 
     batch_size = args.batch_size
 
