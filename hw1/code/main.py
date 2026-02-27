@@ -32,6 +32,7 @@ def visualize_timestep(X_bar, tstep, output_path):
     x_locs = X_bar[:, 0] / 10.0
     y_locs = X_bar[:, 1] / 10.0
     scat = plt.scatter(x_locs, y_locs, c='r', marker='o')
+    plt.gcf().set_size_inches(9, 6)
     plt.savefig('{}/{:04d}.png'.format(output_path, tstep))
     plt.pause(0.00001)
     scat.remove()
@@ -110,7 +111,6 @@ def init_particles_debug(num_particles, occupancy_map):
 
 
 if __name__ == '__main__':
-    np.random.seed(13)
     """
     Description of variables used
     u_t0 : particle state odometry reading [x, y, theta] at time (t-1) [odometry_frame]
@@ -125,8 +125,8 @@ if __name__ == '__main__':
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('--path_to_map', default='../data/map/wean.dat')
-    parser.add_argument('--path_to_log', default='../data/log/robotdata1.log')
-    parser.add_argument('--output', default='results2000parts_debuginit')
+    parser.add_argument('--path_to_log', default='../data/log/robotdata2.log')
+    parser.add_argument('--output', default='results')
     parser.add_argument('--batch_size', default=500, type=int)
     parser.add_argument('--subsampling', default=3, type=int)
     parser.add_argument('--num_particles', default=2000, type=int)
@@ -149,7 +149,7 @@ if __name__ == '__main__':
     num_particles = args.num_particles
     # X_bar = init_particles_random(num_particles, occupancy_map)
     # X_bar = init_particles_freespace(num_particles, occupancy_map)
-    X_bar = init_particles_debug(num_particles, occupancy_map)
+    X_bar = init_particles_freespace(num_particles, occupancy_map)
     
 
     batch_size = args.batch_size
