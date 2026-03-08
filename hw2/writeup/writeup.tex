@@ -1,0 +1,74 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{amsmath, amsfonts}
+
+\title{Homework 2 - SLAM using Extended Kalman Filter (EKF-SLAM)}
+\author{Michael Lin}
+\date{March 2026}
+
+
+
+\begin{document}
+\maketitle
+
+
+\section{Theory}
+\begin{enumerate}
+
+
+    \item \[ \mathbf p_{t+1} = \begin{bmatrix} x_t + \cos(d_t) \\ y_t + \sin(d_t) \\ \theta_t + \alpha_t \end{bmatrix} \]
+
+
+    \item Firstly, we consider the uncertainty from the previous timestep $\Sigma'_{t+1}$. Refer to slides 59 and 60 presented in lecture 9. We compute the Jacobian to get $J|_{x_0} = I$. Therefore:
+    
+    \[ \Sigma_y = A \Sigma_x A^T \implies \Sigma'_{t+1} = I \Sigma_t I^T = \Sigma_t \]
+
+    Next, we consider the noise from the motion model $\Sigma_{t+1}''$. Here, we need to transform the uncertainty from robot coordinates into world coordinates. Let $Q = \text{diag}(\sigma_x, \sigma_y, \sigma_\alpha)$. This can be done with a standard rotation matrix $W_t = \begin{bmatrix} \cos(\theta_t) & -\sin(\theta_t) & 0 \\ \sin(\theta_t) & \cos(\theta_t) & 0 \\ 0 & 0 & 1 \end{bmatrix}$. So we have that $\Sigma_{t+1}'' = W_t Q W_t^T$.
+
+    Finally, we add the two components up to get the final covariance: $\Sigma_{t+1} = \Sigma_{t+1}' + \Sigma_{t+1}'' = \Sigma_t + W_t Q W_t$. The answer is $\mathcal{N}(0, \Sigma_{t+1})$.
+
+
+    \item \[ \begin{bmatrix} l_x \\ l_y \end{bmatrix} = \begin{bmatrix} x_t + \cos(\theta_t + \beta_t + n_\beta) (r + n_r) \\ y_t + \sin(\theta_t + \beta_ t + n_\beta) (r + n_r) \end{bmatrix} \] 
+
+    \item
+    \begin{align*} 
+    \begin{bmatrix} \beta \\ r \end{bmatrix} &= \begin{bmatrix} \arctan(\frac{l_y - y_t}{l_x - x_t}) - \theta_t + n_\beta \\ \sqrt{(l_y - y_t)^2 + (l_x - x_t)^2} + n_r \end{bmatrix} \\
+    &= \begin{bmatrix} \text{np.warp2pi}(\text{np.arctan2}(l_y - y_t, l_x - x_t) - \theta_t + n_\beta) \\ \sqrt{(l_y - y_t)^2 + (l_x - x_t)^2} + n_r \end{bmatrix}
+    \end{align*}
+
+    \item Let $\rho = \frac{l_y - y_t}{l_x - x_t}$. 
+
+    \begin{align*}
+    H_p &= \frac{\partial}{\partial \mathbf p} \begin{bmatrix} \beta \\ r \end{bmatrix} \\
+    &= \frac{\partial}{\partial \mathbf p} \begin{bmatrix} \arctan(\rho) + n_\beta \\ \sqrt{(l_y - y_t)^2 + (l_x - x_t)^2} + n_r \end{bmatrix} \\
+    &= \begin{bmatrix} \frac{1}{1+\rho^2} \cdot \frac{l_y - y_t}{(l_x - x_t)^2} & \frac{1}{1+\rho^2} \cdot \frac{-1}{l_x - x_t} & -1 \\ \frac{x_t - l_x}{\sqrt{(l_y - y_t)^2 + (l_x - x_t)^2}} & \frac{y_t - l_y}{\sqrt{(l_y - y_t)^2 + (l_x - x_t)^2}} & 0 \end{bmatrix}
+    \end{align*}
+
+    \item Let $\rho = \frac{l_y - y_t}{l_x - x_t}$. 
+
+    \begin{align*}
+    H_t &= \frac{\partial}{\partial l} \begin{bmatrix} \beta \\ r\end{bmatrix} \\
+        &= \begin{bmatrix} \frac{1}{1+\rho^2} \cdot \frac{y_t - l_y}{(l_x - x_t)^2} & \frac{1}{1+\rho^2} \cdot \frac{1}{l_x - x_t} \\ \frac{l_x - x_t}{\sqrt{(l_x - x_t)^2 + (l_y - y_t)^2}} & \frac{l_y - y_t}{\sqrt{(l_x - x_t)^2 + (l_y - y_t)^2}}  \end{bmatrix}
+    \end{align*}
+
+    We don't need to compute other Jacobians because each measurement only depends on the landmark that it is viewing, hence, the Jacobian with respect to any other landmark is 0. We can say this built on the assumption that landmarks are independent of another.
+
+\end{enumerate}
+
+
+
+\section{Implementation and Evaluation}
+
+\begin{enumerate}
+
+
+\item We observe a fixed set of six landmarks in the sequence.
+
+
+\item 
+
+
+\end{enumerate}
+
+\end{document}
+
