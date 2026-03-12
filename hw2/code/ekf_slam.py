@@ -86,10 +86,8 @@ def warp2pi(angle_rad):
     \param angle_rad Input angle in radius
     \return angle_rad_warped Warped angle to [-\pi, \pi].
     """
-    
-    
-
-    return None
+    angle_rad = angle_rad % (2 * np.pi)
+    return angle_rad * (angle_rad <= np.pi) + (angle_rad - 2 * np.pi) * (angle_rad > np.pi)
 
 
 def init_landmarks(init_measure, init_measure_cov, init_pose, init_pose_cov):
@@ -110,6 +108,30 @@ def init_landmarks(init_measure, init_measure_cov, init_pose, init_pose_cov):
     landmark = np.zeros((2 * k, 1))
     landmark_cov = np.zeros((2 * k, 2 * k))
 
+    for i in range(0, 2k, 2):
+
+        # convert from (beta, l) -> (dx, dy), then add to original pose
+        beta, l = init_measure[i:i+2]
+        dx, dy = np.cos(beta) * l,  np.sin(beta) * l
+        x, y = init_pose[0] + dx, init_pose[1] + dy
+        angle = init_pose[2] + beta
+        landmark[i:i+2] = [x, y]
+
+        # calculate Jacobian w.r.t. pose
+        Hp = np.array([
+            [1, 0, -l * np.sin(angle)],
+            [0, 1, -l * np.cos(angle)]
+        ])
+
+        # calculate Jacobian w.r.t. measurement
+        Hm = np.array([
+            [-l * np.sin(angle), np.cos(angle)],
+            [l * np.cos(angle), np.sin(angle)]
+        ])
+
+        # update covariance matrix
+        landmark_cov[2*i:2*i+2, 2*i:2*i+2] = Hp @ init_pos_cov * Hp.T + Hm @ init_measure_cov @ Hm.T
+      
     return k, landmark, landmark_cov
 
 
@@ -125,6 +147,8 @@ def predict(X, P, control, control_cov, k):
     \return X_pre Predicted X state of shape (3 + 2k, 1).
     \return P_pre Predicted P covariance of shape (3 + 2k, 3 + 2k).
     '''
+
+    
 
     return X, P
 
