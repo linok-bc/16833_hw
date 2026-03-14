@@ -36,20 +36,11 @@
     &= \begin{bmatrix} \text{np.warp2pi}(\text{np.arctan2}(l_y - y_t, l_x - x_t) - \theta_t + n_\beta) \\ \sqrt{(l_y - y_t)^2 + (l_x - x_t)^2} + n_r \end{bmatrix}
     \end{align*}
 
-    \item Let $\rho = \frac{l_y - y_t}{l_x - x_t}$. 
+    \item Let $\delta_x = l_x - x_t, \delta_y = l_y - y_t, q = \delta_x^2 + \delta_y^2$.
 
-    \begin{align*}
-    H_p &= \frac{\partial}{\partial \mathbf p} \begin{bmatrix} \beta \\ r \end{bmatrix} \\
-    &= \frac{\partial}{\partial \mathbf p} \begin{bmatrix} \arctan(\rho) + n_\beta \\ \sqrt{(l_y - y_t)^2 + (l_x - x_t)^2} + n_r \end{bmatrix} \\
-    &= \begin{bmatrix} \frac{1}{1+\rho^2} \cdot \frac{l_y - y_t}{(l_x - x_t)^2} & \frac{1}{1+\rho^2} \cdot \frac{-1}{l_x - x_t} & -1 \\ \frac{x_t - l_x}{\sqrt{(l_y - y_t)^2 + (l_x - x_t)^2}} & \frac{y_t - l_y}{\sqrt{(l_y - y_t)^2 + (l_x - x_t)^2}} & 0 \end{bmatrix}
-    \end{align*}
+    \[ H_p = \begin{bmatrix} \frac{\delta_y}{q} & \frac{-\delta_x}{q} & -1 \\ \frac{-\delta_x}{\sqrt{q}} & \frac{-\delta_y}{\sqrt{q}} & 0 \end{bmatrix} \]
 
-    \item Let $\rho = \frac{l_y - y_t}{l_x - x_t}$. 
-
-    \begin{align*}
-    H_t &= \frac{\partial}{\partial l} \begin{bmatrix} \beta \\ r\end{bmatrix} \\
-        &= \begin{bmatrix} \frac{1}{1+\rho^2} \cdot \frac{y_t - l_y}{(l_x - x_t)^2} & \frac{1}{1+\rho^2} \cdot \frac{1}{l_x - x_t} \\ \frac{l_x - x_t}{\sqrt{(l_x - x_t)^2 + (l_y - y_t)^2}} & \frac{l_y - y_t}{\sqrt{(l_x - x_t)^2 + (l_y - y_t)^2}}  \end{bmatrix}
-    \end{align*}
+    \item \[ H_l  =  \begin{bmatrix} \frac{\delta_y}{q} & \frac{-\delta_x}{q} \\ \frac{-\delta_x}{\sqrt{q}} & \frac{-\delta_y}{\sqrt{q}} \end{bmatrix}\] 
 
     We don't need to compute other Jacobians because each measurement only depends on the landmark that it is viewing, hence, the Jacobian with respect to any other landmark is 0. We can say this built on the assumption that landmarks are independent of another.
 
@@ -65,8 +56,53 @@
 \item We observe a fixed set of six landmarks in the sequence.
 
 
+\item Figure 2-2 \newline \includegraphics[width=\textwidth]{figure_2-2.png}
+
+\item We've discussed in class how the motion model introduces more uncertainty while the mmeasurement step decreases uncertainty. This is reflected in the plots. The magenta ellipses, which correspond to the motion model, are larger than the blue ellipses, which correspond to the measurement step, which is indicative of higher variance.
+
+For landmarks, we see that the red ellipses are very elongated, suggesting uncertainty about the bearing. The smaller green ellipses after multiple steps are a result of observing the landmark from different angles, which helps reduce the bearing-associated uncertainty in the landmarks' positions.
+
+\item Figure 2-4 (which is a copy of 2-2) \newline \includegraphics[width=\textwidth]{figure_2-2.png}
+
+Each dot is inside the green ellipses. The green ellipses mean that we're 95\% sure that the locations are within the bounded regions, which is true, which further means that our predictions are accurate.
+
+\begin{center}
+\begin{tabular}{ |c|c|c| }
+\hline Landmark \# & Euclidian dist. & Mahalanobis dist. \\
+\hline 1 & 0.0027 & 0.0524 \\
+\hline 2 & 0.0034 & 0.0622 \\
+\hline 3 & 0.0048 & 0.0373 \\
+\hline 4 & 0.0054 & 0.0643 \\
+\hline 5 & 0.0043 & 0.0251 \\
+\hline 6 & 0.0047 & 0.0954 \\
+\hline
+\end{tabular}
+\end{center}
+
+The Eucldian error is very small, which suggests that the actual location is estimated with good accuracy. The Mahalanobis distance means that the difference is also low relative to a standard deviation, which suggests that the EKF's estimated covariances are very conservative.
+\end{enumerate}
+
+\section{Discussion}
+
+\begin{enumerate}
+
+\item At all stages, the pose is affected by the belief of the landmarks' locations. Thus, after one update cycle, the pose becomes correlated with the position of all landmarks. Since the supposed location of each individual landmark is affected by the pose, the position of each landmark is then correlated to the location of all other landmarks, and the off-diagonal entries of the covariance matrix becomes non-zero. The incorrect assumption on line 201 is that the off-diagonal blocks between pose and landmarks is 0, i.e. the initial pose and landmark location estimates are uncorrelated. This is incorrect since the landmark location estimates are initialized from the initial pose, and thus must be correlated to it.
+
 \item 
 
+$\sigma_x$  and $\sigma_y$ seems to scale the uncertainty along the x and y dimensions respectively. Higher $\sigma$ corresponds to more uncertainty about both distance travelled and heading, while lower $\sigma$ would correspond to the opposite. Shown in figure 3.2.1 is a 10x scaling of $\sigma_x$, which is much more elongated along the horizontal axis. 
+
+Figure 3.2.1 \newline \includegraphics[width=\textwidth]{figure_3-2-1.png}
+
+$\sigma_\alpha$ and $\sigma_\beta$ correspond to uncertainty in the pose. This would lead to positional uncertainty incrementally increasing over time, which is shown in figure 3.2.2. The figure is shown with $\sigma_\alpha$ at a 10x scaling and we start to see deviations between the magenta and blue ellipses' centers as the sequence goes on.
+
+Figure 3.2.2 \newline \includegraphics[width=\textwidth]{figure_3-2-2.png}
+
+$\sigma_r$ corresponds to the measurement displacement noise, with higher $\sigma_r$ corresponding to more uncertainty in the forward displacement. This would lead to very large ellipses forming, and conversely for smaller $\sigma_r$. Figure 3.2.3 shows the effect of scaling $\sigma_r$ by 10x.
+
+Figure 3.2.3 \newline \includegraphics[width=\textwidth]{figure_3-2-3.png}
+
+\item One way that constant computation time could be achieved would be to only consider the top $k$ landmarks that we (believe) are closest to the current pose location estimate. Another way would be to randomly sample $k$ landmarks and compare against those.
 
 \end{enumerate}
 

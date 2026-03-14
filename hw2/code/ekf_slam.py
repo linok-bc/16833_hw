@@ -108,29 +108,29 @@ def init_landmarks(init_measure, init_measure_cov, init_pose, init_pose_cov):
     landmark = np.zeros((2 * k, 1))
     landmark_cov = np.zeros((2 * k, 2 * k))
 
-    for i in range(0, 2k, 2):
+    for i in range(0, 2*k, 2):
 
         # convert from (beta, l) -> (dx, dy), then add to original pose
-        beta, l = init_measure[i:i+2]
-        dx, dy = np.cos(beta) * l,  np.sin(beta) * l
-        x, y = init_pose[0] + dx, init_pose[1] + dy
-        angle = init_pose[2] + beta
-        landmark[i:i+2] = [x, y]
+        beta, l = init_measure[i:i+2, 0]
+        angle = init_pose[2, 0] + beta
+        dx, dy = np.cos(angle) * l, np.sin(angle) * l
+        x, y = init_pose[0, 0] + dx, init_pose[1, 0] + dy
+        landmark[i:i+2, 0] = [x, y]
 
         # calculate Jacobian w.r.t. pose
         Hp = np.array([
             [1, 0, -l * np.sin(angle)],
-            [0, 1, -l * np.cos(angle)]
+            [0, 1, l * np.cos(angle)]
         ])
 
         # calculate Jacobian w.r.t. measurement
         Hm = np.array([
-            [-l * np.sin(angle), np.cos(angle)],
-            [l * np.cos(angle), np.sin(angle)]
+            [-l * np.sin(angle), np.cos(angle.item())],
+            [l * np.cos(angle.item()), np.sin(angle.item())]
         ])
 
         # update covariance matrix
-        landmark_cov[2*i:2*i+2, 2*i:2*i+2] = Hp @ init_pos_cov * Hp.T + Hm @ init_measure_cov @ Hm.T
+        landmark_cov[i:i+2, i:i+2] = Hp @ init_pose_cov @ Hp.T + Hm @ init_measure_cov @ Hm.T
       
     return k, landmark, landmark_cov
 
@@ -148,9 +148,38 @@ def predict(X, P, control, control_cov, k):
     \return P_pre Predicted P covariance of shape (3 + 2k, 3 + 2k).
     '''
 
-    
+    k = int((X.shape[0] - 3) / 2)
+    pose_x, pose_y, theta = X[:3, 0]
+    landmarks = X[3:, 0]
+    d, beta = control[:, 0]
 
-    return X, P
+    # motion model
+    dx, dy = d * np.cos(theta), d * np.sin(theta)
+    x, y = pose_x + dx, pose_y + dy
+    X_pre = np.copy(X)
+    X_pre[0:3, 0] = [x, y, warp2pi(theta + beta)]
+
+    # Jacobian of motion model w.r.t. pose
+    Jp = np.array([
+        [1, 0, -d * np.sin(theta)],
+        [0, 1,  d * np.cos(theta)],
+        [0, 0, 1]
+    ])
+
+    # Jacobian of motion model w.r.t. noise
+    Jn = np.array([
+        [np.cos(theta), -np.sin(theta), 0],
+        [np.sin(theta), np.cos(theta), 0],
+        [0, 0, 1]
+    ])
+
+    # propogate covariances
+    Jp_prime = np.eye(X.shape[0])
+    Jp_prime[0:3, 0:3] = Jp
+    P_pre = Jp_prime @ P @ Jp_prime.T
+    P_pre[0:3, 0:3] += Jn @ control_cov @ Jn.T
+
+    return X_pre, P_pre
 
 
 def update(X_pre, P_pre, measure, measure_cov, k):
@@ -166,7 +195,54 @@ def update(X_pre, P_pre, measure, measure_cov, k):
     \return P Updated P covariance of shape (3 + 2k, 3 + 2k).
     '''
 
-    return X_pre, P_pre
+    X = np.copy(X_pre)
+    P = np.copy(P_pre)
+
+    for i in range(0, 2*k, 2):
+
+        # get current pose and landmark estimate
+        pose_x, pose_y, theta = X[0:3, 0]
+        x, y = X[i+3:i+5, 0]
+
+        # get displacement
+        dx, dy = x - pose_x, y - pose_y
+
+        # get predictions
+        r_pred = np.sqrt(dx**2 + dy**2)
+        beta_pred = warp2pi(np.arctan2(dy, dx) - theta)
+       
+        # get measurements and errors
+        beta, r = measure[i, 0], measure[i+1, 0]
+        r_error, beta_error = r - r_pred, beta - beta_pred
+
+        # calculate Jacobian w.r.t. pose
+        Jp = np.array([
+            [dy / (r_pred ** 2), -1 * dx / (r_pred ** 2), -1],
+            [-1 * dx / r_pred, -1 * dy / r_pred, 0],
+        ])
+
+        # calculate Jacobian w.r.t. landmarks
+        Jl = np.array([
+            [-1 * dy / (r_pred ** 2), dx / (r_pred ** 2)],
+            [dx / r_pred, dy / r_pred]
+        ])
+
+        # get whole Jacobian
+        whole_J = np.zeros((2, 2*k+3))
+        whole_J[:2, :3] = Jp
+        whole_J[:2, i+3:i+5] = Jl
+
+        # get Kalman
+        S = whole_J @ P @ whole_J.T + measure_cov
+        K = P @ whole_J.T @ np.linalg.inv(S)
+
+        # update state
+        X = X + K @ np.array([[warp2pi(beta_error.item())], [r_error.item()]])
+        X[2, 0] = warp2pi(X[2, 0])
+        I_KJ = np.eye(2*k+3) - K @ whole_J
+        P = I_KJ @ P @ I_KJ.T + K @ measure_cov @ K.T
+
+    return X, P
 
 
 def evaluate(X, P, k):
@@ -184,14 +260,29 @@ def evaluate(X, P, k):
     plt.draw()
     plt.waitforbuttonpress(0)
 
+    print("Landmark evaluation:")
+    for i in range(k):
+        l_est = X[3 + 2*i:3 + 2*i + 2, 0]
+        l_gt = l_true[2*i:2*i + 2]
+        diff = l_est - l_gt
+ 
+        # Euclidean distance
+        euclidean = np.linalg.norm(diff)
+ 
+        # Mahalanobis distance
+        cov_i = P[3 + 2*i:3 + 2*i + 2, 3 + 2*i:3 + 2*i + 2]
+        mahalanobis = np.sqrt(diff.T @ np.linalg.inv(cov_i) @ diff)
+ 
+        print(f"  Landmark {i}: Euclidean = {euclidean:.4f}, Mahalanobis = {mahalanobis:.4f}")
+
 
 def main():
     # TEST: Setup uncertainty parameters
     sig_x = 0.25
     sig_y = 0.1
-    sig_alpha = 0.1
+    sig_alpha = 0.01
     sig_beta = 0.01
-    sig_r = 0.08
+    sig_r = 0.08 * 10
 
 
     # Generate variance from standard deviation
