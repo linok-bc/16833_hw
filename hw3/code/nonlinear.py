@@ -59,8 +59,7 @@ def odometry_estimation(x, i):
     \return odom Odometry (\Delta x, \Delta) in the shape (2, )
     """
     # TODO: return odometry estimation
-    odom = np.zeros((2,))
-
+    odom = x[2*(i+1):2*(i+2)] - x[2*i:2*(i+1)]
     return odom
 
 
@@ -75,6 +74,13 @@ def bearing_range_estimation(x, i, j, n_poses):
     # TODO: return bearing range estimations
     obs = np.zeros((2,))
 
+    pose = x[2*i:2*i+2]
+    landmark = x[2*(n_poses+j):2*(n_poses+j)+2]
+    dx, dy = landmark[0] - pose[0], landmark[1] - pose[1]
+    theta = np.arctan2(dy, dx)
+    d = np.sqrt(dx**2 + dy**2)
+    obs = np.array([theta, d])
+
     return obs
 
 
@@ -88,6 +94,17 @@ def compute_meas_obs_jacobian(x, i, j, n_poses):
     """
     # TODO: return jacobian matrix
     jacobian = np.zeros((2, 4))
+
+    pose = x[2*i:2*i+2]
+    landmark = x[2*(n_poses+j):2*(n_poses+j)+2]
+
+    dx, dy = landmark[0] - pose[0], landmark[1] - pose[1]
+    d = np.sqrt(dx**2 + dy**2)
+
+    jacobian = np.array([
+        [dy/d**2, -dx/d**2, -dy/d**2, dx/d**2],
+        [-dx/d, -dy/d, dx/d, dy/d]
+    ])
 
     return jacobian
 
@@ -121,10 +138,37 @@ def create_linear_system(
     sqrt_inv_obs = np.linalg.inv(scipy.linalg.sqrtm(sigma_observation))
 
     # TODO: First fill in the prior to anchor the 1st pose at (0, 0)
+    A[:2, :2] = np.eye(2)
+    b[:2] = -x[:2]
 
     # TODO: Then fill in odometry measurements
+    for i in range(n_odom):
+        H_o = sqrt_inv_odom @ np.array([
+            [-1, 0, 1, 0],
+            [0, -1, 0, 1]
+        ])
+        row, col = 2*(1+i), 2*i
+        A[row:row+2, col:col+4] = H_o 
+
+        error = odoms[i] - odometry_estimation(x, i)
+        b[row:row+2] = sqrt_inv_odom @ error
 
     # TODO: Then fill in landmark measurements
+    for i in range(n_obs):
+        row = 2 + n_odom * 2 + i * 2
+        pose_idx = int(observations[i, 0])
+        land_idx = int(observations[i, 1])
+
+        H_l = compute_meas_obs_jacobian(x, pose_idx, land_idx, n_poses)
+        A[row:row+2, 2*pose_idx:2*pose_idx+2] = sqrt_inv_obs @ H_l[:, :2]
+        land_col = 2 * n_poses + 2 * land_idx
+        A[row:row+2, land_col:land_col+2] = sqrt_inv_obs @ H_l[:, 2:]
+
+        z = observations[i, 2:4]
+        z_hat = bearing_range_estimation(x, pose_idx, land_idx, n_poses)
+        error = z - z_hat
+        error[0] = warp2pi(error[0])
+        b[row:row+2] = sqrt_inv_obs @ error
 
     return csr_matrix(A), b
 

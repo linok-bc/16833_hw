@@ -87,7 +87,20 @@ Similarly, given the robot pose $\mathbf{r}^t = [r_x^t,~ r_y^t]^\top$ at time $t
     h_l(\mathbf{r}^t, \mathbf{l}^{k}):&~ \mathbb{R}^4 \to \mathbb{R}^{2}, \\
     H_l(\mathbf{r}^t, \mathbf{l}^{k}):&~ \mathbb{R}^4 \to \mathbb{R}^{2\times 4}.
 \end{align*}
-    
+
+\subsubsection{Solution}
+
+The answer is given with the assumption that the input for $h_o$ has shape $\begin{bmatrix} r_x^t & r_y^t & r_x^{t+1} & r_y^{t+1} \end{bmatrix}^T$, and similarly, the input for $h_l$ has shape $\begin{bmatrix} r_x^t & r_y^t & l_x^k & l_y^k \end{bmatrix}^T$.
+
+\[ h_o(\mathbf{r}^t,~ \mathbf{r}^k) = \begin{bmatrix} r_x^{t+1} - r_x^t \\ r_y^{t+1} - r_y^t \end{bmatrix} \] 
+
+\[ H_o(\mathbf{r}^t,~ \mathbf{r}^k) = \begin{bmatrix} -1 & 0 & 1 & 0 \\ 0 & -1 & 0 & 1 \end{bmatrix}\]
+
+\[ h_l(\mathbf{r}^t,~ \mathbf{l}^k) = \begin{bmatrix} l_x^k - r_x^t \\ l_y^k - r_y^t \end{bmatrix} \] 
+
+\[ H_l(\mathbf{r}^t,~ \mathbf{l}^k) = \begin{bmatrix} -1 & 0 & 1 & 0 \\ 0 & -1 & 0 & 1 \end{bmatrix}\]
+
+
 \subsection{Build a linear system (15 points)}
 Use the derivation above, please complete the function \textbf{$\mathtt{create\_linear\_system}$} 
 to construct the linear system as described in Eq.~\ref{eq:linear}. (15 points)
@@ -119,9 +132,38 @@ Now we want to exploit sparsity in the linear system in QR and LU factorizations
     \item (Bonus) Instead of LU's built-in solver, write your own forward/backward substitution to compute $x$. Note because of reordering (permutation), you need to manipulate both rows and columns. Please check \href{https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.SuperLU.html#scipy.sparse.linalg.SuperLU}{online documents} for more details. (10 points)
     \item $\mathtt{qr\_cholmod}$. Change the ordering from the default $\mathtt{NATURAL}$ to $\mathtt{COLAMD}$ (Column approximate minimum degree permutation) and return $x$, $R$. Note now you have to use $E$ from $\mathtt{sparseqr.rz}$. \\$\mathtt{sparseqr.permutation\_vector\_to\_matrix}$ can be useful for permutation. (5 points)
     \item Now proceed with $\mathtt{2d\_linear.npz}$, visualize the trajectory and landmarks, and report the efficiency of your method in terms of run time. Attach the visualization and analysis of corresponding factor for $\mathtt{qr, qr\_colamd, lu, lu\_colamd}$. What are your observations and their potential reasons (general comparison between QR, LU, and their reordered version)? (10 points)
+
+\subsubsection{Solution}
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline
+    Method & Runtime (s) & Visualization \\ \hline
+    pinv & 1.4062423706054688 & \\ \hline
+    lu & 0.015847206115722656 & \rule{0pt}{5cm} \includegraphics[width=0.4\textwidth]{lu_linear.png} \\ \hline
+    lu\_colamd & 0.02504420280456543 & \rule{0pt}{5cm} \includegraphics[width=0.4\textwidth]{lu_colamd_linear.png} \\ \hline
+    qr & 0.2497105598449707 & \rule{0pt}{5cm} \includegraphics[width=0.4\textwidth]{qr_linear.png} \\ \hline
+    qr\_colamd & 0.17293643951416016 & \rule{0pt}{5cm} \includegraphics[width=0.4\textwidth]{qr_colamd_linear.png} \\ \hline
+\end{tabular}
+\end{center}
+\vspace{1em}
+pinv is the slowest since it doesn't exploit sparisty and must invert a large matrix (that it thinks is dense). Cholesky is the fastest non-colamd solutions, which is an advantage over QR that we've discussed in class since it works over $A^TA$ and not $A$ and $A^TA$ is smaller because the problem is overdetermined. Regarding colamd, we see a decrease in performance for Cholesky and and increase in performance for QR factorization.
+
     \item Similarly, process $\mathtt{2d\_linear\_loop.npz}$. Are there differences in efficiency comparing to $\mathtt{2d\_linear.npz}$? Write down your observations and reasoning. (10 points)
 \end{enumerate}
 
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline
+Method & Runtime (s) & Visualization \\ \hline
+    pinv & 0.11315441131591797 & \\ \hline
+    lu & 0.029034852981567383 & \rule{0pt}{5cm} \includegraphics[width=0.4\textwidth]{lu_loop.png} \\ \hline
+    lu\_colamd &  0.01010894775390625 & \rule{0pt}{5cm} \includegraphics[width=0.4\textwidth]{lu_colamd_loop.png} \\ \hline
+    qr & 0.2979743480682373 & \rule{0pt}{5cm} \includegraphics[width=0.4\textwidth]{qr_loop.png} \\ \hline
+    qr\_colamd & 0.026876449584960938 & \rule{0pt}{5cm} \includegraphics[width=0.4\textwidth]{qr_colamd_loop.png} \\ \hline
+\end{tabular}
+\end{center}
+\vspace{1em}
+There are differences in performance, the most prominent one being that colamd has a significant performance improvement for both Cholesky and QR now. This is because the loop closures leads to more non-zero entries during the factorization processes; by reordering the rows, colamd decreases the amount of extra non-zero entries.
 
 \section{2D Nonlinear SLAM}
 
@@ -140,7 +182,6 @@ h_{l}\left(\mathbf{r}^t, \mathbf{l}^{k}\right) & = &  & \left[\begin{array}{c}
 \left(\left(l_{x}^k-r_{x}^t\right)^{2}+\left(l_{y}^k-r_{y}^t\right)^{2}\right)^{\frac{1}{2}}
 \end{array}\right]=\left[\begin{array}{c}
 \theta\\
-d
 \end{array}\right].\label{eq:nonlin_meas}
 \end{alignat}
 
@@ -166,6 +207,21 @@ to calculate the jacobian at the provided linearization point. (5
 points)
 \end{enumerate}
 
+\subsubsection{Solution}
+
+Let $\Delta_x = l^k_x - r^t_x, \Delta_y = l^k_y - r^t_y, d = \sqrt{\Delta_x^2 + \Delta_y^2}$
+
+\begin{align*}
+H_l(\mathbf{r}^t, \mathbf{l}^{k}) &= \begin{bmatrix} 
+\frac{1}{1 + (\frac{\Delta_y}{\Delta_x})^2} \cdot \frac{\Delta_y}{\Delta_x^2} & \frac{1}{1 + (\frac{\Delta_y}{\Delta_x})^2} \cdot \frac{-1}{\Delta_x} & \frac{1}{1 + (\frac{\Delta_y}{\Delta_x})^2} \cdot \frac{-\Delta_y}{\Delta_x^2} & \frac{1}{1 + (\frac{\Delta_y}{\Delta_x})^2} \cdot \frac{1}{\Delta_x}\\
+\frac{-\Delta_x}{\sqrt{\Delta_x^2 + \Delta_y^2}} & \frac{-\Delta_y}{\sqrt{\Delta_x^2 + \Delta_y^2}} & \frac{\Delta_x}{\sqrt{\Delta_x^2 + \Delta_y^2}} & \frac{\Delta_y}{\sqrt{\Delta_x^2 + \Delta_y^2}}\\
+\end{bmatrix} \\
+&= \begin{bmatrix}
+\frac{\Delta_y}{d^2} & \frac{-\Delta_x}{d^2} & \frac{-\Delta_y}{d^2} & \frac{\Delta_x}{d^2} \\
+\frac{-\Delta_x}{d} & \frac{-\Delta_y}{d} & \frac{\Delta_x}{d} & \frac{\Delta_y}{d}
+\end{bmatrix}
+\end{align*}
+
 \subsection{Build a linear system (15 points)}
 Use the derivation above, implement \textbf{$\mathtt{create\_linear\_system}$}, now in $\mathtt{nonlinear.py}$, to generate the linear system $A$ and $b$ at the current linearization point. (15 points)
 In addition to the notes for the linear case, please remember to 
@@ -177,6 +233,16 @@ In addition to the notes for the linear case, please remember to
 
 \subsection{Solver (10 points)}
 Process $\mathtt{2d\_nonlinear.npz}$. Select one solver you have implemented, and visualize the trajectory and landmarks before and after optimization. Briefly summarize the differences between the optimization process of the linear and the non-linear SLAM problems. (10 points)
+
+\subsubsection{Solution}
+\begin{tabular}{|c|c|}
+\hline Pre-optimized QR & Post-optimized QR \\ \hline
+\rule{0pt}{6cm}\includegraphics[width=0.5\textwidth]{nonlinear_qr_preopt.png} & \rule{0pt}{6cm}\includegraphics[width=0.5\textwidth]{nonlinear_qr_postopt.png} \\ \hline
+\end{tabular}
+
+\hspace{1em}
+
+Linear SLAM solves in one go: you build a linear system once and solve directly for x. Nonlinear SLAM is solved in a for loop. Each cycle of the for loop uses a different point to do linearization around, computes a correction $dx$ to apply to the state, then updates the state.
 
 \section{Code Submission}
 Instructions:
